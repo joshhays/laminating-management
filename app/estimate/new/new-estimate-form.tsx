@@ -1674,6 +1674,116 @@ export function NewEstimateForm({
       return !Number.isFinite(n) || n < 0;
     })();
 
+  type EstimateStepId =
+    | "crm"
+    | "description"
+    | "paper"
+    | "trim"
+    | "sheet"
+    | "lamination"
+    | "finish";
+
+  const stepSequence = useMemo((): EstimateStepId[] => {
+    const s: EstimateStepId[] = ["crm", "description", "paper", "trim", "sheet"];
+    if (laminationRequired) s.push("lamination");
+    s.push("finish");
+    return s;
+  }, [laminationRequired]);
+
+  useEffect(() => {
+    setActiveStep((i) => Math.min(i, Math.max(0, stepSequence.length - 1)));
+  }, [stepSequence.length]);
+
+  const currentStepId = stepSequence[activeStep] ?? "crm";
+
+  const trimStepValid =
+    !trimImpositionBlocksSubmit ||
+    finalSheetWidthInches.trim() === "" ||
+    finalSheetLengthInches.trim() === "";
+
+  const sheetStepValid =
+    descriptionStepValid &&
+    qtyNumbersOk &&
+    Number.isFinite(matWNum) &&
+    matWNum > 0 &&
+    Number.isFinite(sheetLenNum) &&
+    sheetLenNum > 0;
+
+  const laminationStepValid =
+    !laminationRequired ||
+    (Boolean(filmId) &&
+      !dimensionError &&
+      (!secondPassEnabled || secondFilmSameAsFirst || Boolean(secondFilmId)));
+
+  const canSubmit =
+    crmContext != null &&
+    (partDrafts.length >= 2 ||
+      ((laminationRequired ? filmAgg != null && preview != null : true) &&
+        !dimensionError &&
+        !sheetBoundsError &&
+        paperFieldsOk &&
+        !trimImpositionBlocksSubmit &&
+        cutterCutsPreview.ok &&
+        (!trimRequiresCutter || autoCutterMachineId) &&
+        (!autoCutterMachineId || previewCutterLabor.error === null) &&
+        (!skidPackEnabled || previewSkidPack.error === null) &&
+        !finalDeliveryInputInvalid));
+
+  const stepReady = useMemo(
+    () => ({
+      crm: crmContext != null,
+      description: descriptionStepValid,
+      paper: paperFieldsOk,
+      trim: trimStepValid,
+      sheet: sheetStepValid,
+      lamination: laminationStepValid,
+      finish: canSubmit,
+    }),
+    [
+      crmContext,
+      descriptionStepValid,
+      sheetStepValid,
+      paperFieldsOk,
+      trimStepValid,
+      laminationStepValid,
+      canSubmit,
+    ],
+  );
+
+  const isLastStep = activeStep >= stepSequence.length - 1;
+
+  const renderStepFooter = (stepKey: keyof typeof stepReady) => (
+    <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-4 print:hidden">
+      {activeStep > 0 && (
+        <button
+          type="button"
+          onClick={() => setActiveStep((s) => Math.max(0, s - 1))}
+          className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
+        >
+          Back
+        </button>
+      )}
+      {!isLastStep ? (
+        <button
+          type="button"
+          disabled={!stepReady[stepKey]}
+          onClick={() => setActiveStep((s) => Math.min(stepSequence.length - 1, s + 1))}
+          className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+        >
+          Continue
+        </button>
+      ) : (
+        <button
+          type="submit"
+          disabled={saving || !canSubmit}
+          className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save estimate"}
+        </button>
+      )}
+    </div>
+  );
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -1916,116 +2026,6 @@ export function NewEstimateForm({
       </div>
     );
   }
-
-  const canSubmit =
-    crmContext != null &&
-    (partDrafts.length >= 2 ||
-      ((laminationRequired ? filmAgg != null && preview != null : true) &&
-        !dimensionError &&
-        !sheetBoundsError &&
-        paperFieldsOk &&
-        !trimImpositionBlocksSubmit &&
-        cutterCutsPreview.ok &&
-        (!trimRequiresCutter || autoCutterMachineId) &&
-        (!autoCutterMachineId || previewCutterLabor.error === null) &&
-        (!skidPackEnabled || previewSkidPack.error === null) &&
-        !finalDeliveryInputInvalid));
-
-  type EstimateStepId =
-    | "crm"
-    | "description"
-    | "paper"
-    | "trim"
-    | "sheet"
-    | "lamination"
-    | "finish";
-
-  const stepSequence = useMemo((): EstimateStepId[] => {
-    const s: EstimateStepId[] = ["crm", "description", "paper", "trim", "sheet"];
-    if (laminationRequired) s.push("lamination");
-    s.push("finish");
-    return s;
-  }, [laminationRequired]);
-
-  useEffect(() => {
-    setActiveStep((i) => Math.min(i, Math.max(0, stepSequence.length - 1)));
-  }, [stepSequence.length]);
-
-  const currentStepId = stepSequence[activeStep] ?? "crm";
-
-  const trimStepValid =
-    !trimImpositionBlocksSubmit ||
-    finalSheetWidthInches.trim() === "" ||
-    finalSheetLengthInches.trim() === "";
-
-  const sheetStepValid =
-    descriptionStepValid &&
-    qtyNumbersOk &&
-    Number.isFinite(matWNum) &&
-    matWNum > 0 &&
-    Number.isFinite(sheetLenNum) &&
-    sheetLenNum > 0;
-
-  const laminationStepValid =
-    !laminationRequired ||
-    (Boolean(filmId) &&
-      !dimensionError &&
-      (!secondPassEnabled || secondFilmSameAsFirst || Boolean(secondFilmId)));
-
-  const stepReady = useMemo(
-    () => ({
-      crm: crmContext != null,
-      description: descriptionStepValid,
-      paper: paperFieldsOk,
-      trim: trimStepValid,
-      sheet: sheetStepValid,
-      lamination: laminationStepValid,
-      finish: canSubmit,
-    }),
-    [
-      crmContext,
-      descriptionStepValid,
-      sheetStepValid,
-      paperFieldsOk,
-      trimStepValid,
-      laminationStepValid,
-      canSubmit,
-    ],
-  );
-
-  const isLastStep = activeStep >= stepSequence.length - 1;
-
-  const renderStepFooter = (stepKey: keyof typeof stepReady) => (
-    <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-4 print:hidden">
-      {activeStep > 0 && (
-        <button
-          type="button"
-          onClick={() => setActiveStep((s) => Math.max(0, s - 1))}
-          className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50"
-        >
-          Back
-        </button>
-      )}
-      {!isLastStep ? (
-        <button
-          type="button"
-          disabled={!stepReady[stepKey]}
-          onClick={() => setActiveStep((s) => Math.min(stepSequence.length - 1, s + 1))}
-          className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-        >
-          Continue
-        </button>
-      ) : (
-        <button
-          type="submit"
-          disabled={saving || !canSubmit}
-          className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-        >
-          {saving ? "Saving…" : "Save estimate"}
-        </button>
-      )}
-    </div>
-  );
 
   return (
     <form
