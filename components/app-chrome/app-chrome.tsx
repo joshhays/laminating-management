@@ -15,20 +15,11 @@ export function AppChrome({
   session: SiteSession | null;
 }) {
   const pathname = usePathname();
-  const minimalChrome = pathname === "/login" || pathname.startsWith("/login/");
   const printScheduler =
     pathname.startsWith("/schedule/digital-print") || pathname.startsWith("/schedule/laminating");
   const quoteLetter = pathname.includes("/quote-letter");
   const jobTicketLetter = pathname.includes("/job-ticket");
   const printLetterDocument = quoteLetter || jobTicketLetter;
-
-  if (minimalChrome) {
-    return (
-      <div className="min-h-screen bg-[var(--dashboard-bg)] print:block print:min-h-0 print:bg-white">
-        {children}
-      </div>
-    );
-  }
 
   return (
     <div

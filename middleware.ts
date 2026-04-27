@@ -15,12 +15,7 @@ export async function middleware(request: NextRequest) {
   const payload = token ? await verifySiteToken(token) : null;
 
   if (!payload) {
-    if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname + request.nextUrl.search);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.next();
   }
 
   const session = {

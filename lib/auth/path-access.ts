@@ -42,7 +42,6 @@ function requiredModuleForApi(pathname: string): AppModuleKey | AuthOnly {
  * AUTH_ONLY = any logged-in user.
  */
 export function requiredModuleForPath(pathname: string): AppModuleKey | AuthOnly | null {
-  if (pathname === "/login" || pathname.startsWith("/login/")) return null;
   if (pathname === "/forbidden" || pathname.startsWith("/forbidden/")) return null;
   if (pathname.startsWith("/api/auth/")) return null;
   if (pathname.startsWith("/api/print-scheduler/")) return null;
