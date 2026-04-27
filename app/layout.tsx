@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   description: "Production, film inventory, and scheduling",
 };
 
+/** Avoid Prisma/DB at `next build` prerender time; data routes should render on request. */
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: Readonly<{
