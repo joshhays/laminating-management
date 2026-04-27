@@ -1,0 +1,21 @@
+Stock category,Basis Weight,Approx GSM,Caliper (pt),Caliper (Inches)
+Uncoated Offset / Text,50 lb,74,4.0 pt,0.004
+Uncoated Offset / Text,60 lb,89,4.8 pt,0.0048
+Uncoated Offset / Text,70 lb,104,5.8 pt,0.0058
+Uncoated Offset / Text,80 lb,118,6.1 pt,0.0061
+Uncoated Offset / Text,100 lb,148,7.5 pt,0.0075
+Coated Text (Gloss),80 lb,118,3.8 pt,0.0038
+Coated Text (Gloss),100 lb,148,4.8 pt,0.0048
+Coated Text (Dull/Matte),80 lb,118,4.2 pt,0.0042
+Coated Text (Dull/Matte),100 lb,148,5.4 pt,0.0054
+Uncoated Cover,65 lb,176,9.5 pt,0.0095
+Uncoated Cover,80 lb,216,11.5 pt,0.0115
+Uncoated Cover,100 lb,270,14.0 pt,0.014
+Coated Cover (Gloss),80 lb,216,7.5 pt,0.0075
+Coated Cover (Gloss),100 lb,270,9.5 pt,0.0095
+Coated Cover (Gloss),120 lb,325,12.0 pt,0.012
+Coated Cover (Dull/Matte),80 lb,216,9.0 pt,0.009
+Coated Cover (Dull/Matte),100 lb,270,11.0 pt,0.011
+Coated Cover (Dull/Matte),120 lb,325,14.0 pt,0.014
+Coated Cover (Dull/Matte),130 lb,350,15.5 pt,0.0155
+Coated Cover (Dull/Matte),146 lb,400,18 pt,0.018

@@ -1,0 +1,110 @@
+/* US Letter — @page margins reserve 1" top/bottom between pages so content isn’t flush to edges. */
+@media print {
+  @page {
+    size: 8.5in 11in;
+    /* Top/bottom: 1in breathing room at page boundaries. Sides: 0.5in. */
+    margin: 1in 0.5in 1in 0.5in;
+  }
+
+  [data-radix-dialog-overlay],
+  [data-radix-dialog-content] {
+    display: none !important;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .quote-letter-page,
+  .quote-letter-screen-wrap,
+  .quote-letter-sheet {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: relative !important;
+    transform: none !important;
+    filter: none !important;
+  }
+
+  .quote-letter-page {
+    min-height: 0 !important;
+    background: #fff !important;
+  }
+
+  .quote-letter-screen-wrap {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+
+  /* Flow across pages; padding comes from @page margins (don’t double with p-[0.5in]). */
+  .quote-letter-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    box-sizing: border-box !important;
+  }
+
+  .quote-letter-ticket {
+    color: #18181b !important;
+    background: #fff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    orphans: 3;
+    widows: 3;
+  }
+
+  .quote-letter-ticket .quote-ticket-masthead,
+  .quote-letter-ticket .quote-ticket-parties,
+  .quote-letter-ticket .quote-ticket-meta {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .quote-letter-ticket h1 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .quote-letter-ticket h2 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Keep table rows intact; allow the table itself to continue on the next page. */
+  .quote-letter-ticket table {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .quote-letter-ticket tr,
+  .quote-letter-ticket thead,
+  .quote-letter-ticket tfoot {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .quote-letter-ticket .quote-ticket-footer {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .quote-letter-ticket p,
+  .quote-letter-ticket li {
+    orphans: 3;
+    widows: 3;
+  }
+}

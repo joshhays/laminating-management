@@ -1,0 +1,115 @@
+/* US Letter — same @page and break rules as quote-letter-print.css */
+@media print {
+  @page {
+    size: 8.5in 11in;
+    margin: 1in 0.5in 1in 0.5in;
+  }
+
+  [data-radix-dialog-overlay],
+  [data-radix-dialog-content] {
+    display: none !important;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Avoid blank output: flex/scroll ancestors sometimes collapse or clip in print engines. */
+  .job-ticket-print-page,
+  .job-ticket-print-wrap,
+  .job-ticket-print-sheet {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: relative !important;
+    transform: none !important;
+    filter: none !important;
+  }
+
+  .job-ticket-print-page {
+    min-height: 0 !important;
+    background: #fff !important;
+  }
+
+  .job-ticket-print-wrap {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+
+  .job-ticket-print-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    box-sizing: border-box !important;
+  }
+
+  .job-ticket-print-article {
+    color: #18181b !important;
+    background: #fff !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    orphans: 3;
+    widows: 3;
+  }
+
+  .job-ticket-print-article > header {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  /* Shop + customer block */
+  .job-ticket-print-article > section:nth-of-type(1) {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Reference meta table */
+  .job-ticket-print-article > section:nth-of-type(2) {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .job-ticket-print-article h1,
+  .job-ticket-print-article h2 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .job-ticket-print-article table {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .job-ticket-print-article tr,
+  .job-ticket-print-article thead,
+  .job-ticket-print-article tfoot {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .job-ticket-print-article > footer {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .job-ticket-print-article p {
+    orphans: 3;
+    widows: 3;
+  }
+}

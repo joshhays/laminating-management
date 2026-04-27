@@ -1,0 +1,161 @@
+@import "tailwindcss";
+
+:root {
+  --dashboard-bg: #f5f7fa;
+  --dashboard-accent: #3f3dbc;
+}
+
+@theme inline {
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+@keyframes estimate-step-enter {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.estimate-step-enter {
+  animation: estimate-step-enter 0.38s ease-out both;
+}
+
+/* Print only estimate blocks: hide siblings, never hide an ancestor of the print root
+   (display:none on a parent suppresses the whole subtree — that caused blank prints). */
+@media print {
+  /* No global @page here — quote letter / job ticket define @page (size + margins).
+     Estimates use padded print roots below so content isn’t flush to the sheet edge. */
+
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+
+  .estimate-detail-page > *:not(.estimate-print-root) {
+    display: none !important;
+  }
+
+  .estimate-detail-page {
+    max-width: none !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+  }
+
+  .new-estimate-page > header {
+    display: none !important;
+  }
+
+  .new-estimate-page > form > *:not(.live-estimate-print-root) {
+    display: none !important;
+  }
+
+  .new-estimate-page > form {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  .new-estimate-page {
+    max-width: none !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+  }
+
+  .estimate-print-root,
+  .live-estimate-print-root {
+    display: block !important;
+    position: static !important;
+    box-sizing: border-box;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0.6in !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: white !important;
+    box-shadow: none !important;
+    color: #18181b !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .live-estimate-print-root table,
+  .estimate-print-root table {
+    page-break-inside: auto;
+  }
+
+  .live-estimate-print-root tr,
+  .estimate-print-root tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .estimate-print-root dl {
+    break-inside: auto;
+  }
+
+  .estimate-print-root > section > dl > div {
+    break-inside: avoid;
+  }
+}
+
+/* Print scheduler — FullCalendar chrome */
+.resource-stack-cal .fc,
+.resource-timeline-root .fc {
+  --fc-border-color: rgb(228 228 231);
+  --fc-neutral-bg-color: rgb(250 250 250);
+  --fc-today-bg-color: rgb(244 244 245 / 0.5);
+  --fc-page-bg-color: transparent;
+  --fc-button-bg-color: rgb(24 24 27);
+  --fc-button-border-color: rgb(24 24 27);
+  --fc-button-text-color: rgb(250 250 250);
+  --fc-button-hover-bg-color: rgb(39 39 42);
+}
+@media (prefers-color-scheme: dark) {
+  .resource-stack-cal .fc,
+  .resource-timeline-root .fc {
+    --fc-border-color: rgb(39 39 42);
+    --fc-neutral-bg-color: rgb(24 24 27);
+    --fc-today-bg-color: rgb(39 39 42 / 0.35);
+    --fc-button-bg-color: rgb(250 250 250);
+    --fc-button-border-color: rgb(250 250 250);
+    --fc-button-text-color: rgb(24 24 27);
+    --fc-button-hover-bg-color: rgb(228 228 231);
+  }
+}
+.resource-stack-cal .fc .fc-toolbar-title,
+.resource-timeline-root .fc .fc-toolbar-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: rgb(24 24 27);
+}
+@media (prefers-color-scheme: dark) {
+  .resource-stack-cal .fc .fc-toolbar-title,
+  .resource-timeline-root .fc .fc-toolbar-title {
+    color: rgb(250 250 250);
+  }
+}
+.resource-stack-cal .fc .fc-scrollgrid,
+.resource-timeline-root .fc .fc-scrollgrid {
+  border-radius: 0.75rem;
+}
+.resource-stack-cal .fc .fc-event,
+.resource-timeline-root .fc .fc-event {
+  border-radius: 0.5rem;
+}
+
+/* CRM command palette (Radix Dialog) above sidebar / header */
+[data-radix-dialog-overlay],
+[data-radix-dialog-content] {
+  z-index: 200;
+}

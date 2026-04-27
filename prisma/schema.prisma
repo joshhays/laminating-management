@@ -1,0 +1,876 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum JobStatus {
+  QUEUED
+  IN_PROGRESS
+  DONE
+  SHIPPED
+}
+
+/// Linear lifecycle for a job (quote → production → archive).
+enum JobWorkflowStatus {
+  DRAFT
+  QUOTED
+  AWARDED
+  PURCHASING
+  PRODUCTION
+  SHIPPING
+  COMPLETE
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  ORDERED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum InventoryMovementType {
+  PO_RECEIVE
+  HARD_COUNT
+  MANUAL_DEDUCT
+  JOB_PULL
+}
+
+/// Film roll: physically stocked vs catalog-only (order job quantity; not held on floor).
+enum FilmStockKind {
+  FLOOR_STOCK
+  CATALOG
+}
+
+enum JobFilmAllocationStatus {
+  ALLOCATED
+  PULLED
+  CANCELLED
+}
+
+/// Shop-floor timer: line time hits machine burden; labor time hits labor burden.
+enum JobTimeActivityKind {
+  LINE_TIME
+  LABOR_TIME
+}
+
+enum CompanyType {
+  PROSPECT
+  CUSTOMER
+  VENDOR
+  ARCHIVED
+}
+
+enum PriceTier {
+  BROKER
+  RETAIL
+  INTERNAL
+}
+
+enum CompanyFileKind {
+  LOGO
+  BRAND_GUIDELINES
+  OTHER
+}
+
+/// Stock basis for spoilage bands (US text vs cover). Null on a rule = any basis.
+enum SpoilagePaperBasis {
+  TEXT
+  COVER
+}
+
+/// Substrate sheet color for slowdown rules (white stock vs non-white / colored stock).
+enum EstimatePaperColor {
+  WHITE
+  COLORED
+}
+
+/// CRM timeline events (estimates, jobs, shipping, notes). Wire new surfaces with recordActivity().
+enum ActivityType {
+  ESTIMATE_CREATED
+  JOB_CREATED
+  JOB_STATUS_CHANGED
+  JOB_SHIPPED
+  /// Reserved for carrier / label workflows when implemented.
+  SHIPPING_LABEL_PRINTED
+  NOTE
+}
+
+enum MachineTypeKind {
+  LAMINATOR
+  CUTTER
+  /// Estimating: sheetfed / web press (offset, toner, inkjet — see `pressTechnology`).
+  PRESS
+  /// Post-press: folders, cutters, binders, etc. — see `finishingKind`.
+  FINISHING
+  /// Mail prep / inserting / addressing (estimating setup).
+  MAILING
+}
+
+model Company {
+  id                 String      @id @default(cuid())
+  name               String      @unique
+  type               CompanyType @default(PROSPECT)
+  website            String?
+  address            String?
+  notes              String?
+  /// Soft credit cap (USD). Estimates above this flag accounting review.
+  creditLimit        Float?
+  /// Accounts receivable / open balance for warnings (USD).
+  outstandingBalance Float       @default(0)
+  priceTier          PriceTier?
+  /// User-defined fields (e.g. preferred laminate, gate code). Flat JSON object; map to JsonB on Postgres.
+  customFields       Json?
+  contacts           Contact[]
+  estimates          Estimate[]
+  estimateBundles    EstimateBundle[]
+  files              CompanyFile[]
+  activities         Activity[]
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  /// Optional; unique when present.
+  email     String?  @unique
+  phone     String?
+  isPrimary Boolean  @default(false)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  estimates Estimate[]
+  estimateBundles EstimateBundle[]
+  activities Activity[]
+
+  @@index([companyId])
+}
+
+/// Multiple full estimates (different specs) sharing one quoted number and one customer-facing letter.
+model EstimateBundle {
+  id        String   @id @default(cuid())
+  /// Shared display number with standalone estimates (same sequence as Estimate.estimateNumber).
+  quoteNumber Int    @unique
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  contactId String
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  /// True when any line in the bundle exceeded credit at save time.
+  accountingReviewRequired Boolean @default(false)
+  /// Shared quote-letter overrides when this bundle has more than one estimate.
+  quoteLetterEdits    Json?
+  estimates Estimate[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([contactId])
+}
+
+/// Account-centric activity timeline (linked deal = estimate/job where relevant).
+model Activity {
+  id        String       @id @default(cuid())
+  createdAt DateTime     @default(now())
+  type      ActivityType
+  title     String
+  body      String?
+  metadata  Json?
+  companyId   String?
+  company     Company?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contactId   String?
+  contact     Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  estimateId  String?
+  estimate    Estimate?   @relation(fields: [estimateId], references: [id], onDelete: SetNull)
+  jobTicketId String?
+  jobTicket   JobTicket?  @relation(fields: [jobTicketId], references: [id], onDelete: SetNull)
+  machineId   String?
+  machine     Machine?    @relation(fields: [machineId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@index([estimateId, createdAt])
+  @@index([jobTicketId, createdAt])
+  @@index([createdAt])
+}
+
+/// Logos, brand guidelines, etc. (URL or app-relative path).
+model CompanyFile {
+  id        String          @id @default(cuid())
+  companyId String
+  company   Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  kind      CompanyFileKind @default(OTHER)
+  label     String?
+  url       String
+  createdAt DateTime        @default(now())
+
+  @@index([companyId])
+}
+
+/// Quote / pricing line before production.
+model Estimate {
+  id                  String   @id @default(cuid())
+  /// Sequential display number for quotes (starts at 10000). Distinct from `id`. Null when this row is bundled under `estimateBundle.quoteNumber`.
+  estimateNumber      Int?     @unique
+  sheetSize           String
+  quantity            Int
+  filmType            String
+  markup              Float
+  setupWaste          Float
+  /// Film + lamination machine/labor + optional cutter when those are set.
+  totalCost           Float
+  sheetLengthInches   Float
+  /// Linear feet for one pass through the line (from production sheet count × sheet length).
+  estimatedLinearFeet Float
+  materialWidthInches Float?
+  laminateWidthInches Float?
+  /// Total cross-web unprinted margin (both sides). Laminate width = sheet width − this (default 0.5 in = ¼ in per side).
+  laminateWidthInsetInches Float @default(0.5)
+  rollWidthSnapshotInches Float?
+  slitExcessWidthInches Float?
+  materialSquareInches Float?
+  laminateFilmSquareInches Float?
+  filmFromRollSquareInches Float?
+  slitWasteSquareInches Float?
+  /// Modeled machine burden from est. run time × machine $/hr (run minutes only).
+  estimatedMachineCost Float?
+  /// Modeled labor from est. job time × labor $/hr (make ready + run + side change + wash up).
+  estimatedLaborCost   Float?
+  /// Snapshot: $/MSI (1000 sq in); line total = (film off roll sq in ÷ 1000) × this.
+  pricePerFilmSquareInch Float? @map("pricePerMaterialSquareInch")
+  filmInventoryId     String?
+  filmRoll            FilmInventory? @relation("EstimatePrimaryFilm", fields: [filmInventoryId], references: [id], onDelete: SetNull)
+  machineId           String?
+  machine             Machine? @relation("EstimateLaminator", fields: [machineId], references: [id], onDelete: SetNull)
+  cutterMachineId     String?
+  cutterMachine       Machine? @relation("EstimateCutter", fields: [cutterMachineId], references: [id], onDelete: SetNull)
+  /// Run size → final trim: cuts per sheet × production sheets (includes spoilage).
+  estimatedCutCount   Int?
+  /// Modeled cutter time (hours): base setup + build lift × number of lifts + per-cut times × total cuts.
+  estimatedCutterLaborHours Float?
+  /// Machine burden + operator labor for cutter (sum of the two snapshot lines below).
+  estimatedCutterCost Float?
+  paperGsm            Float?
+  stockType           String?
+  printType           String?
+  /// White vs colored sheet — drives machine slowdown rules; defaults to white.
+  paperColor          EstimatePaperColor @default(WHITE)
+  /// Required on new estimates: estimator description of substrate (e.g. 12pt C2S, 100# gloss text).
+  paperDescription    String?
+  estimatedRunTimeMinutes Float?
+  /// Effective line speed (m/min) after speed rules, at time of estimate; used for sheets/hour display.
+  effectiveLineSpeedMpm Float?
+  /// Second laminating pass (other side). Usually same film; optional different roll.
+  secondPassEnabled     Boolean  @default(false)
+  secondFilmInventoryId String?
+  secondFilmRoll        FilmInventory? @relation("EstimateSecondFilm", fields: [secondFilmInventoryId], references: [id], onDelete: SetNull)
+  secondFilmSameAsFirst Boolean  @default(true)
+  secondPricePerFilmSquareInch Float? @map("secondPricePerMaterialSquareInch")
+  /// 1 = single-sided pass; 2 = two passes (both sides).
+  passCount             Int      @default(1)
+  /// Extra sheets from machine spoilage % (snapshot at estimate).
+  spoilageAllowanceSheets Int    @default(0)
+  /// Trim size after lamination (optional).
+  finalSheetWidthInches   Float?
+  finalSheetLengthInches  Float?
+  /// Finished pieces per parent (run) sheet at trim — 1-up, 2-up, etc. (max over standard vs rotated layout).
+  finalTrimPiecesPerSheet Int @default(1)
+  /// Dutch-style internal cuts (fewer) vs bleed layout (more strokes).
+  finalTrimNoBleedDutchCut Boolean @default(true)
+  /// True when best imposition used artwork rotated 90° on the sheet.
+  finalTrimImpositionRotated Boolean @default(false)
+  /// Full sheet is press-ready: yield uses full parent (no 0.25 in inset) even with bleed layout.
+  finalTrimIsPressReady Boolean @default(false)
+  /// quantity × finalTrimPiecesPerSheet (snapshot when saved).
+  estimatedFinishedPieceCount Int?
+  /// Substrate caliper (inches per sheet) — used with cutter max stack height for lift count.
+  sheetThicknessInches    Float?
+  /// Sheets per lift from floor(max stack height ÷ thickness).
+  estimatedCutterSheetsPerLift Int?
+  /// Ceil(production sheets ÷ sheets per lift).
+  estimatedCutterLiftCount     Int?
+  /// Cutter hours × machine $/hr (same elapsed hours as labor line).
+  estimatedCutterMachineOnlyCost Float?
+  /// Cutter hours × labor $/hr.
+  estimatedCutterLaborOnlyCost Float?
+  /// Customer / job includes delivery of finished work (ship or final drop).
+  includesFinalDelivery Boolean @default(false)
+  /// Flat delivery charge included in totalCost when includesFinalDelivery (USD).
+  finalDeliveryCostUsd  Float?
+  /// Optional delivery instructions (address, carrier, timing).
+  finalDeliveryNotes    String?
+  /// Skid pack: pre-lam inbound skids vs outbound finished skids (limits from SkidPackSettings: height + weight).
+  skidPackEnabled                Boolean  @default(false)
+  estimatedSkidPackInboundSkids  Int?
+  estimatedSkidPackOutboundSkids Int?
+  estimatedSkidPackCost          Float?
+  skidPackPricePerSkidSnapshot   Float?
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contactId   String?
+  contact     Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  /// Snapshot for printed quotes (survives CRM edits).
+  quoteCompanyName     String?
+  quoteCompanyAddress  String?
+  quoteContactName     String?
+  quoteContactEmail    String?
+  /// True when total exceeded catalog credit limit at save time.
+  accountingReviewRequired Boolean @default(false)
+  /// Optional overrides for customer-facing quote letter copy (see `lib/quote-letter-edits.ts`). Unused when `bundleId` is set (edits live on `EstimateBundle`).
+  quoteLetterEdits    Json?
+  bundleId            String?
+  estimateBundle      EstimateBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  /// Order of this part within the bundle (0 = primary).
+  bundleSortOrder     Int      @default(0)
+  /// Short label for the bundle tab / quote letter row (e.g. "Cover", "Tip-in").
+  bundlePartLabel     String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  jobTicket JobTicket?
+  activities Activity[]
+  /// Customer-facing splits of the same press/lam run (quantities sum to `quantity`; costs are proportional snapshots).
+  lines EstimateLine[]
+
+  @@index([bundleId])
+}
+
+/// One part/SKU on an estimate — same machine, film, and sheet size; `quantity` is order sheets for this line.
+model EstimateLine {
+  id               String   @id @default(cuid())
+  estimateId       String
+  estimate         Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  sortOrder        Int      @default(0)
+  label            String   @default("")
+  quantity         Int
+  /// Proportional share of `Estimate.totalCost` at save time (adjusted so rows sum to total).
+  allocatedCostUsd Float
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([estimateId])
+}
+
+/// Singleton (id = "global"): skid pack pricing + stack limits for shipping estimates.
+model SkidPackSettings {
+  id                    String   @id @default("global")
+  pricePerSkidUsd       Float    @default(0)
+  /// Max stack height for inbound / outbound skid piles (inches).
+  maxStackHeightInches  Float    @default(40)
+  /// Max weight per skid pile (pounds) — combined with height in estimates.
+  maxSkidWeightLbs      Float    @default(1500)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+/// Template for defaults when creating machines (expand as you add equipment families).
+model MachineType {
+  id        String   @id @default(cuid())
+  name      String
+  kind      MachineTypeKind @default(LAMINATOR)
+  /// When kind is PRESS: OFFSET | TONER | INKJET (drives estimating fields in UI).
+  pressTechnology String?
+  /// When kind is FINISHING: CUTTER | FOLDER | BINDER | OTHER.
+  finishingKind String?
+  sortOrder Int      @default(0)
+  notes     String?
+  defaultMakeReadyMinutes       Float?
+  defaultSideChangeMinutes      Float?
+  defaultWashUpMinutes          Float?
+  defaultSpoilagePercent        Float?
+  defaultMinSheetWidthInches    Float?
+  defaultMaxSheetWidthInches    Float?
+  defaultMinSheetLengthInches   Float?
+  defaultMaxSheetLengthInches   Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  machines Machine[]
+}
+
+/// Production laminator / laminating line.
+model Machine {
+  id                String   @id @default(cuid())
+  name              String
+  maxWidthInches    Float
+  /// Maximum rated line speed (m/min); also used when no speed rule matches.
+  maxSpeedMetersMin Float
+  /// Upper limit (0–100) on the sum of matching rule slowdown %. Default 100 (same as before).
+  maxTotalSlowdownPercent Float @default(100)
+  /// Machine burden rate applied to actual run hours on jobs ($/hr).
+  hourlyRate        Float    @default(0)
+  laborHourlyRate   Float    @default(0)
+  /// Formerly “setup time”; one-time make-ready before running.
+  makeReadyMinutes  Float    @default(0) @map("setupTimeMinutes")
+  /// Minutes added to make ready when the job’s print process is Digital (e.g. toner lift / web warm-up).
+  extraMakeReadyDigitalMinutes Float @default(0)
+  /// Minutes added to make ready when the job’s print process is Offset.
+  extraMakeReadyOffsetMinutes  Float @default(0)
+  /// Between first and second pass (two-sided jobs only).
+  sideChangeMinutes Float    @default(0)
+  washUpMinutes     Float    @default(0)
+  /// Fallback spoilage % when order quantity matches no MachineSpoilageRule.
+  spoilagePercent   Float    @default(0)
+  /// Optional list $/cut; estimates use cutter labor hours × labor $/hr.
+  pricePerCut       Float    @default(0)
+  /// E.g. max stack or pile height (inches).
+  cutterMaxHeightInches    Float?
+  /// Max lift / pile weight (e.g. lb) for cutter capacity planning.
+  cutterMaxWeight          Float?
+  /// When max(sheet W, L) is at least this (in), apply oversize lift cap and optional helper labor rate.
+  cutterOversizeMinLongEdgeInches Float?
+  /// Optional lower max stack height (in) for oversize sheets; effective lift uses min(this, cutterMaxHeightInches).
+  cutterOversizeMaxLiftHeightInches Float?
+  /// Labor $/hr for oversize sheets (e.g. second person); when set on an oversize job, replaces laborHourlyRate for cutter hours only.
+  cutterHelperLaborHourlyRate Float?
+  /// One-time setup before cutting (hours).
+  cutterBaseSetupHours     Float    @default(0)
+  /// Time to build / position a lift (hours).
+  cutterBuildLiftHours     Float    @default(0)
+  /// Added setup time per cut stroke (hours).
+  cutterAdditionalSetupHoursPerCut Float @default(0)
+  /// Run time per cut stroke (hours).
+  cutterPerCutHours        Float    @default(0)
+  /// Optional spoilage % applied at make ready (cutter workflow).
+  cutterMakeReadySpoilagePercent Float?
+  /// When set, apply minimum-cuts style billing rules (shop preference).
+  cutterMinCutsEnabled     Boolean  @default(false)
+  /// Optional sheet size window (null = no min/max on that edge).
+  minSheetWidthInches   Float?
+  maxSheetWidthInches   Float?
+  minSheetLengthInches  Float?
+  maxSheetLengthInches  Float?
+  machineTypeId     String?
+  machineType       MachineType? @relation(fields: [machineTypeId], references: [id], onDelete: SetNull)
+  /// Model-specific settings (cutterType, heatingMethod, etc.). Stored as JSON text (SQLite).
+  technicalSpecs    Json?
+  notes             String?
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  speedReductionRules MachineSpeedReductionRule[]
+  spoilageRules     MachineSpoilageRule[]
+  jobTickets JobTicket[]
+  estimatesLaminate Estimate[] @relation("EstimateLaminator")
+  estimatesCutter   Estimate[] @relation("EstimateCutter")
+  activities        Activity[]
+}
+
+/// Spoilage % by order quantity range. First matching rule (by sortOrder) wins; if none match, use Machine.spoilagePercent.
+model MachineSpoilageRule {
+  id              String   @id @default(cuid())
+  machineId       String
+  machine         Machine  @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  sortOrder       Int      @default(0)
+  name            String?
+  /// When set, rule applies only to that stock basis (text vs cover). Null = any basis.
+  paperBasis      SpoilagePaperBasis?
+  /// Inclusive; null = 1 (any job with this rule’s upper bound still applies from 1).
+  quantityMin     Int?
+  /// Inclusive; null = no upper limit.
+  quantityMax     Int?
+  spoilagePercent Float
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([machineId])
+}
+
+/// When an estimate matches all set conditions, apply slowdownPercent toward max line speed (m/min).
+/// Unset (null) fields are wildcards. Multiple matching rules: 1st at full %, 2nd at ½, 3rd at ¼, 4th at ⅛, … toward Σ; capped by Machine.maxTotalSlowdownPercent (≤100).
+model MachineSpeedReductionRule {
+  id                    String   @id @default(cuid())
+  machineId             String
+  machine               Machine  @relation(fields: [machineId], references: [id], onDelete: Cascade)
+  sortOrder             Int      @default(0)
+  name                  String?
+  paperGsmMin           Float?
+  paperGsmMax           Float?
+  stockType             String?
+  printType             String?
+  /// White vs colored — null = any (wildcard).
+  paperColor            EstimatePaperColor?
+  filmMaterialType      String?
+  quantityMin           Int?
+  quantityMax           Int?
+  sheetWidthMinInches   Float?
+  sheetWidthMaxInches   Float?
+  sheetLengthMinInches  Float?
+  sheetLengthMaxInches  Float?
+  /// 0–100: line runs at maxSpeed × (1 − totalMatchedPercent/100).
+  slowdownPercent       Float
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([machineId])
+}
+
+/// Editable film / laminate material codes (replaces fixed enum). `code` is stored on rolls and PO lines.
+model FilmMaterialTypeOption {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  label     String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model JobTicket {
+  id              String    @id @default(cuid())
+  /// Display number for shop tickets (starts at 20000); assigned when the job is created from an estimate.
+  jobNumber       Int?      @unique
+  machineAssigned String
+  operatorNotes   String?
+  status          JobStatus @default(QUEUED)
+  /// Linear workflow (quote → production → complete). COMPLETE locks edits.
+  workflowStatus   JobWorkflowStatus @default(DRAFT)
+  workflowLockedAt DateTime?
+  shippedAt       DateTime?
+  /// Target finish / ship date (set at conversion or edited on the floor).
+  dueDate         DateTime?
+  /// Main job description (auto-filled from estimate; editable on the ticket).
+  ticketTitle                  String?
+  /// Extra detail: line items, internal notes (auto + editable).
+  ticketDescriptionAdditional  String?
+  /// Customer snapshot from estimate quote fields.
+  customerCompanyName   String?
+  customerAddress       String?
+  customerContactName   String?
+  customerContactEmail String?
+  /// Multi-line shop copy: substrate, sheet, print (snapshot at job creation).
+  stockInformation      String?
+  /// Film spec + rolls (snapshot).
+  filmInformation       String?
+  /// Laminator / line run summary (snapshot).
+  pressRunInformation   String?
+  /// Trim, cutter, lifts (snapshot).
+  binderyInstructions   String?
+  /// Delivery, skid pack, carrier notes (snapshot + editable).
+  shippingInstructions String?
+  /// Laminating week-grid placement (local shop time).
+  scheduledStart DateTime?
+  scheduledEnd   DateTime?
+  /// Custom job fields (e.g. rush notes); JSON object for no-code extensions.
+  customFields    Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  machineId String?
+  machine   Machine? @relation(fields: [machineId], references: [id], onDelete: SetNull)
+  /// Actual machine run time for this job (hours).
+  actualRunTimeHours Float?
+  /// Actual labor hours charged to this job (hours).
+  actualLaborHours   Float?
+
+  estimateId String?   @unique
+  estimate   Estimate? @relation(fields: [estimateId], references: [id], onDelete: SetNull)
+
+  shipments            Shipment[]
+  filmAllocations      JobFilmAllocation[]
+  inventoryMovements   InventoryMovement[]
+  activities           Activity[]
+  timeLogs             JobTimeLog[]
+  purchaseRequirements PurchaseRequirement[]
+
+  @@index([scheduledStart])
+  @@index([workflowStatus])
+}
+
+model ShopFloorEmployee {
+  id        String   @id @default(cuid())
+  name      String
+  /// Optional bcrypt PIN. Null = sign-in with employee only (trusted floor device).
+  pinHash   String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  timeLogs JobTimeLog[]
+
+  @@unique([name])
+}
+
+model JobTimeLog {
+  id           String              @id @default(cuid())
+  jobTicketId  String
+  jobTicket    JobTicket           @relation(fields: [jobTicketId], references: [id], onDelete: Cascade)
+  employeeId   String
+  employee     ShopFloorEmployee   @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  activityKind JobTimeActivityKind
+  startedAt    DateTime
+  endedAt      DateTime?
+  /// Production sheets for this run segment (required when stopping a LINE_TIME timer).
+  sheetsRun    Int?
+  notes        String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  inventoryMovements InventoryMovement[]
+
+  @@index([jobTicketId])
+  @@index([employeeId])
+  @@index([employeeId, endedAt])
+}
+
+/// Film shortfall flagged when advancing workflow (e.g. before purchasing).
+model PurchaseRequirement {
+  id              String         @id @default(cuid())
+  jobTicketId     String
+  jobTicket       JobTicket      @relation(fields: [jobTicketId], references: [id], onDelete: Cascade)
+  filmInventoryId String?
+  filmInventory   FilmInventory? @relation(fields: [filmInventoryId], references: [id], onDelete: SetNull)
+  description     String
+  linearFeetShort Float?
+  createdAt       DateTime       @default(now())
+
+  @@index([jobTicketId])
+}
+
+model FilmInventory {
+  id                     String           @id @default(cuid())
+  rollWidth              Float
+  thicknessMil           Float
+  materialType           String
+  description            String
+  /// On-floor stock vs catalog-only (pricing/spec reference; not deducted on job pull).
+  stockKind              FilmStockKind    @default(FLOOR_STOCK)
+  vendor                 String?
+  remainingLinearFeet    Float
+  /// $/MSI (1000 sq in). Line total uses (film sq in off roll ÷ 1000) × this.
+  pricePerFilmSquareInch Float            @default(0) @map("pricePerMaterialSquareInch")
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  estimatesPrimary     Estimate[] @relation("EstimatePrimaryFilm")
+  estimatesSecondFilm  Estimate[] @relation("EstimateSecondFilm")
+  inventoryMovements   InventoryMovement[]
+  jobAllocations       JobFilmAllocation[]
+  purchaseOrderLines   PurchaseOrderLine[]
+  purchaseRequirements PurchaseRequirement[]
+}
+
+model Shipment {
+  id              String   @id @default(cuid())
+  trackingNumber  String
+  boxCount        Int
+  weight          Float
+  destination     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  jobTicketId String?
+  jobTicket   JobTicket? @relation(fields: [jobTicketId], references: [id], onDelete: SetNull)
+}
+
+model PurchaseOrder {
+  id           String              @id @default(cuid())
+  reference    String?
+  supplierName String?
+  /// Optional — used for “Send to vendor” mailto / copy.
+  vendorEmail  String?
+  status       PurchaseOrderStatus @default(DRAFT)
+  notes        String?
+  /// When the PO was marked sent to the supplier (email / EDI / etc.).
+  sentAt       DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  lines PurchaseOrderLine[]
+}
+
+model PurchaseOrderLine {
+  id                 String   @id @default(cuid())
+  purchaseOrderId    String
+  purchaseOrder      PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  /// When set, receiving this line adds linear feet to this catalog/on-floor roll instead of creating a new SKU.
+  filmInventoryId    String?
+  filmInventory      FilmInventory? @relation(fields: [filmInventoryId], references: [id], onDelete: SetNull)
+  materialType       String
+  description        String
+  thicknessMil       Float
+  rollWidth          Float
+  orderedLinearFeet  Float
+  receivedLinearFeet Float    @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  inventoryMovements InventoryMovement[]
+
+  @@index([filmInventoryId])
+}
+
+/// Audit trail for all linear-foot changes on a roll.
+model InventoryMovement {
+  id                     String                @id @default(cuid())
+  filmInventoryId        String
+  filmInventory          FilmInventory         @relation(fields: [filmInventoryId], references: [id], onDelete: Cascade)
+  type                   InventoryMovementType
+  deltaLinearFeet        Float
+  balanceAfterLinearFeet Float
+  note                   String?
+  purchaseOrderLineId    String?
+  purchaseOrderLine      PurchaseOrderLine?    @relation(fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
+  jobTicketId            String?
+  jobTicket              JobTicket?            @relation(fields: [jobTicketId], references: [id], onDelete: SetNull)
+  jobTimeLogId           String?
+  jobTimeLog             JobTimeLog?           @relation(fields: [jobTimeLogId], references: [id], onDelete: SetNull)
+  createdAt              DateTime              @default(now())
+
+  @@index([jobTimeLogId])
+}
+
+/// Reserved film on a job (from estimate); operator pull consumes from the roll.
+model JobFilmAllocation {
+  id                  String                   @id @default(cuid())
+  jobTicketId         String
+  jobTicket           JobTicket                @relation(fields: [jobTicketId], references: [id], onDelete: Cascade)
+  filmInventoryId     String
+  filmInventory       FilmInventory            @relation(fields: [filmInventoryId], references: [id], onDelete: Restrict)
+  allocatedLinearFeet Float
+  /// Linear feet from the estimate at job conversion (for variance vs end-of-day pull).
+  estimatedLinearFeetSnapshot Float?
+  /// 1 = first pass roll; 2 = second pass when a different roll is used.
+  passOrder           Int                      @default(1)
+  status              JobFilmAllocationStatus  @default(ALLOCATED)
+  pulledAt            DateTime?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  @@unique([jobTicketId, passOrder])
+}
+
+/// Main app navigation / API areas (grants are per-user unless isAdmin).
+enum AppModule {
+  OVERVIEW
+  ESTIMATES
+  JOBS
+  SHOP_FLOOR
+  CRM
+  PURCHASING
+  INVENTORY
+  MODULE_SETUP
+  SCHEDULE
+  SHIPPING
+  /// User management at /admin/users (only assignable by admins).
+  ADMIN
+}
+
+/// Site login for Yorke Flow (not the digital print scheduler `SchedulerUser`).
+model SiteUser {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  displayName  String?
+  /// Full access to all modules and admin screens.
+  isAdmin      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  moduleGrants SiteUserModuleGrant[]
+}
+
+model SiteUserModuleGrant {
+  id        String    @id @default(cuid())
+  userId    String
+  user      SiteUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module    AppModule
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, module])
+}
+
+// --- Print job scheduler (digital press schedule) — tables: app_users, machines, print_jobs ---
+
+/// Application login for /print-scheduler. Role ADMIN bypasses individual flags in code.
+model SchedulerUser {
+  id           String  @id @default(cuid())
+  username     String  @unique
+  displayName  String
+  passwordHash String
+  /// ADMIN | MANAGER | OPERATOR | VIEWER | MACHINE — MACHINE users only see jobs on `machineId`.
+  role         String  @default("VIEWER")
+
+  machineId String?
+  machine   PrintPressMachine? @relation(fields: [machineId], references: [id])
+
+  canViewSchedule     Boolean @default(true)
+  canEditSchedule     Boolean @default(false)
+  canImportJobs       Boolean @default(false)
+  canManageMachines   Boolean @default(false)
+  canViewCompletedTab Boolean @default(false)
+  canViewCancelledTab Boolean @default(false)
+  canManageUsers      Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("app_users")
+}
+
+/// Digital press row for FullCalendar `resourceId` (use `slug`, e.g. printer_01).
+model PrintPressMachine {
+  id        String  @id @default(cuid())
+  slug      String  @unique
+  name      String
+  sortOrder Int     @default(0)
+  /// SHEETS_PER_HOUR: use speedSheetsPerHour. TONER: use speedPagesPerMinute.
+  pressType String  @default("SHEETS_PER_HOUR")
+  speedSheetsPerHour    Int?
+  speedPagesPerMinute   Int?
+  speedMatrixJson       String?
+  jobs           PrintScheduleJob[]
+  schedulerUsers SchedulerUser[]
+
+  @@map("machines")
+}
+
+/// Pace-style digital print job + calendar placement.
+model PrintScheduleJob {
+  id            String    @id @default(cuid())
+  jobNumber     String    @unique
+  partCount     Int?
+  dueDate       DateTime?
+  proofDue      DateTime?
+  needInHandsAt DateTime?
+  customerName  String?
+  poNumber      String?
+  description   String?
+  stockDescription String?
+  runSheetSize  String?
+  quantity      Int?
+  pressModel    String?
+  sheetsToPress Int?
+  sheetsOnPress Int?
+  duplex        Boolean?
+  paperGsm      Int?
+  salesperson   String?
+  csr           String?
+  priority      String?
+  estimateNumber String?
+  jobOrderType   String?
+  rawPdfText     String?
+  sourceFileName String?
+  ticketPdfPath  String?
+
+  title           String?
+  machineId       String?
+  machine         PrintPressMachine? @relation(fields: [machineId], references: [id])
+  startTime       DateTime?
+  endTime         DateTime?
+  color           String?   @default("#3b82f6")
+  calendarStatus  String?   @default("scheduled")
+  pressRunStartedAt   DateTime?
+  pressRunEndedAt     DateTime?
+  pressRunPausedAt    DateTime?
+  pressRunTotalPausedMs Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("print_jobs")
+}
