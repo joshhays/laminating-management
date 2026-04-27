@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
 import { AppChrome } from "@/components/app-chrome/app-chrome";
-import { getSiteSession } from "@/lib/auth/session";
+import { getSiteSession, type SiteSession } from "@/lib/auth/session";
 import "./globals.css";
 
 const inter = Inter({
@@ -24,7 +24,12 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await getSiteSession();
+  let session: SiteSession | null = null;
+  try {
+    session = await getSiteSession();
+  } catch {
+    session = null;
+  }
   return (
     <html lang="en">
       <body

@@ -44,8 +44,15 @@ const quickLinks = [
 ] as const;
 
 export default async function Home() {
-  const [rollCount, estimateCount, machineCount, activeJobs, scheduleJobs] =
-    await Promise.all([
+  let rollCount = 0;
+  let estimateCount = 0;
+  let machineCount = 0;
+  let activeJobs = 0;
+  let scheduleJobs = 0;
+  let dbError: string | null = null;
+
+  try {
+    const results = await Promise.all([
       prisma.filmInventory.count(),
       prisma.estimate.count(),
       prisma.machine.count({ where: { active: true } }),
@@ -54,9 +61,29 @@ export default async function Home() {
       }),
       prisma.printScheduleJob.count(),
     ]);
+    [rollCount, estimateCount, machineCount, activeJobs, scheduleJobs] = results;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Database error";
+    dbError = message;
+  }
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">
+      {dbError ? (
+        <div
+          role="alert"
+          className="rounded-2xl border border-amber-200/90 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          <p className="font-semibold">Could not load dashboard metrics</p>
+          <p className="mt-1 text-amber-900/90">{dbError}</p>
+          <p className="mt-2 text-xs text-amber-800/80">
+            On Railway, set <code className="rounded bg-amber-100/80 px-1">DATABASE_URL</code> to your
+            Postgres connection string and apply the schema (e.g.{" "}
+            <code className="rounded bg-amber-100/80 px-1">npx prisma db push</code> against that
+            database).
+          </p>
+        </div>
+      ) : null}
       <section>
         <h2 className="sr-only">Key metrics</h2>
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">

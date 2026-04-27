@@ -1,7 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { SITE_SESSION_COOKIE } from "@/lib/auth/constants";
-import { verifySiteToken } from "@/lib/auth/jwt";
 import { canAccessModule, requiredModuleForPath } from "@/lib/auth/path-access";
 
 export async function middleware(request: NextRequest) {
@@ -12,7 +11,13 @@ export async function middleware(request: NextRequest) {
   }
 
   const token = request.cookies.get(SITE_SESSION_COOKIE)?.value;
-  const payload = token ? await verifySiteToken(token) : null;
+  /** Dynamic import keeps `jose` off the default Edge path (avoids runtime issues on some hosts). */
+  const payload = token
+    ? await (async () => {
+        const { verifySiteToken } = await import("@/lib/auth/jwt");
+        return verifySiteToken(token);
+      })()
+    : null;
 
   if (!payload) {
     return NextResponse.next();
