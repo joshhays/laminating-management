@@ -1,0 +1,13 @@
+# Local Postgres for development (schema uses provider = "postgresql").
+# Host port 5433 avoids clashing with Postgres.app / Homebrew on 5432.
+# Start: npm run db:up  →  then: npx prisma db push
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: laminating_management

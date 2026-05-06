@@ -1,4 +1,17 @@
+import { prismaMessageWithConnectionHints } from "@/lib/database-url-health";
 import { prisma } from "@/lib/prisma";
+
+async function withPrismaAccessHints<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/denied access|\(not available\)/i.test(msg)) {
+      throw new Error(prismaMessageWithConnectionHints(msg), { cause: err });
+    }
+    throw err;
+  }
+}
 
 /** Seeded when the options table is empty (legacy enum equivalents). */
 export const DEFAULT_FILM_MATERIAL_TYPES: {
@@ -16,31 +29,37 @@ export const DEFAULT_FILM_MATERIAL_TYPES: {
 ];
 
 export async function ensureFilmMaterialTypeDefaults(): Promise<void> {
-  const count = await prisma.filmMaterialTypeOption.count();
-  if (count > 0) return;
-  await prisma.filmMaterialTypeOption.createMany({
-    data: DEFAULT_FILM_MATERIAL_TYPES.map((d) => ({
-      code: d.code,
-      label: d.label,
-      sortOrder: d.sortOrder,
-      active: true,
-    })),
+  return withPrismaAccessHints(async () => {
+    const count = await prisma.filmMaterialTypeOption.count();
+    if (count > 0) return;
+    await prisma.filmMaterialTypeOption.createMany({
+      data: DEFAULT_FILM_MATERIAL_TYPES.map((d) => ({
+        code: d.code,
+        label: d.label,
+        sortOrder: d.sortOrder,
+        active: true,
+      })),
+    });
   });
 }
 
 export async function getFilmMaterialLabelMap(): Promise<Map<string, string>> {
-  await ensureFilmMaterialTypeDefaults();
-  const rows = await prisma.filmMaterialTypeOption.findMany();
-  return new Map(rows.map((r) => [r.code, r.label]));
+  return withPrismaAccessHints(async () => {
+    await ensureFilmMaterialTypeDefaults();
+    const rows = await prisma.filmMaterialTypeOption.findMany();
+    return new Map(rows.map((r) => [r.code, r.label]));
+  });
 }
 
 export async function getActiveFilmMaterialCodes(): Promise<Set<string>> {
-  await ensureFilmMaterialTypeDefaults();
-  const rows = await prisma.filmMaterialTypeOption.findMany({
-    where: { active: true },
-    select: { code: true },
+  return withPrismaAccessHints(async () => {
+    await ensureFilmMaterialTypeDefaults();
+    const rows = await prisma.filmMaterialTypeOption.findMany({
+      where: { active: true },
+      select: { code: true },
+    });
+    return new Set(rows.map((r) => r.code));
   });
-  return new Set(rows.map((r) => r.code));
 }
 
 /** New rolls / PO lines: must be an active code. */
@@ -51,12 +70,14 @@ export async function isActiveFilmMaterialCode(code: string): Promise<boolean> {
 
 /** Existing roll edits: any defined code (including inactive) is allowed. */
 export async function isKnownFilmMaterialCode(code: string): Promise<boolean> {
-  await ensureFilmMaterialTypeDefaults();
-  const row = await prisma.filmMaterialTypeOption.findUnique({
-    where: { code },
-    select: { code: true },
+  return withPrismaAccessHints(async () => {
+    await ensureFilmMaterialTypeDefaults();
+    const row = await prisma.filmMaterialTypeOption.findUnique({
+      where: { code },
+      select: { code: true },
+    });
+    return row != null;
   });
-  return row != null;
 }
 
 export function normalizeFilmMaterialCode(raw: string): string {
@@ -69,12 +90,14 @@ export function normalizeFilmMaterialCode(raw: string): string {
 }
 
 export async function collectUsedFilmMaterialCodes(): Promise<Set<string>> {
-  const [fromRolls, fromLines] = await Promise.all([
-    prisma.filmInventory.findMany({ select: { materialType: true } }),
-    prisma.purchaseOrderLine.findMany({ select: { materialType: true } }),
-  ]);
-  const s = new Set<string>();
-  for (const r of fromRolls) s.add(r.materialType);
-  for (const r of fromLines) s.add(r.materialType);
-  return s;
+  return withPrismaAccessHints(async () => {
+    const [fromRolls, fromLines] = await Promise.all([
+      prisma.filmInventory.findMany({ select: { materialType: true } }),
+      prisma.purchaseOrderLine.findMany({ select: { materialType: true } }),
+    ]);
+    const s = new Set<string>();
+    for (const r of fromRolls) s.add(r.materialType);
+    for (const r of fromLines) s.add(r.materialType);
+    return s;
+  });
 }

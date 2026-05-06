@@ -489,7 +489,7 @@ export function NewEstimateForm({
         ? parsedPaperSpec.gsm
         : gsmFromCaliperPtRule != null
           ? gsmFromCaliperPtRule
-          : NaN;
+        : NaN;
 
   const sheetWeightPreview = useMemo(() => {
     if (!Number.isFinite(effectiveGsm) || effectiveGsm <= 0) return null;
@@ -1514,8 +1514,8 @@ export function NewEstimateForm({
 
   const previewGrandTotalUsd = useMemo(() => {
     if (!laminationRequired) {
-      const conv = estimateConversionUsd;
-      return (
+    const conv = estimateConversionUsd;
+    return (
         (conv?.machine ?? 0) +
         (conv?.labor ?? 0) +
         previewCutterLabor.totalUsd +
@@ -2206,7 +2206,7 @@ export function NewEstimateForm({
                   Part description
                 </span>
                 <input
-                  required
+            required
                   type="text"
                   value={row.label}
                   onChange={(e) =>
@@ -2259,7 +2259,7 @@ export function NewEstimateForm({
             Turn on to quote film, laminator time, and second-pass options.
           </span>
         </span>
-      </label>
+        </label>
       {renderStepFooter("description")}
       </div>
       )}
@@ -2343,7 +2343,7 @@ export function NewEstimateForm({
                   min={0}
                   step="any"
                   value={paperBasisLb}
-                  onChange={(e) => {
+              onChange={(e) => {
                     setPaperBasisLb(e.target.value);
                     setPaperGsmUserEdited(false);
                   }}
@@ -2416,9 +2416,9 @@ export function NewEstimateForm({
                 value={paperNotes}
                 onChange={(e) => {
                   setPaperNotes(e.target.value);
-                  setPaperGsmUserEdited(false);
-                }}
-                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400"
+                setPaperGsmUserEdited(false);
+              }}
+              className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400"
                 placeholder='e.g. "white", brand, or freeform line like "270 gsm" if not using lb above'
               />
             </label>
@@ -2445,11 +2445,11 @@ export function NewEstimateForm({
               gsmFromCaliperPtRule == null &&
               paperDescriptionComposed.trim() !== "" &&
               parsedPaperSpec.gsm != null && (
-                <p className="mt-1.5 text-xs text-zinc-600">
-                  → <span className="font-medium tabular-nums">{parsedPaperSpec.gsm} GSM</span>
-                  {parsedPaperSpec.detail ? ` (${parsedPaperSpec.detail})` : ""} for speed rules.
-                </p>
-              )}
+              <p className="mt-1.5 text-xs text-zinc-600">
+                → <span className="font-medium tabular-nums">{parsedPaperSpec.gsm} GSM</span>
+                {parsedPaperSpec.detail ? ` (${parsedPaperSpec.detail})` : ""} for speed rules.
+              </p>
+            )}
             {paperDescriptionComposed.trim() !== "" &&
               parsedPaperSpec.gsm == null &&
               parsedPaperSpec.method === "none" &&
@@ -2587,14 +2587,14 @@ export function NewEstimateForm({
           <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
             Guillotine internal cut style
           </span>
-          <select
+              <select
             value={finalTrimNoBleedDutchCut ? "dutch" : "bleed"}
             onChange={(e) => setFinalTrimNoBleedDutchCut(e.target.value === "dutch")}
             className="mt-1 w-full max-w-xl rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-400"
           >
             <option value="dutch">No bleed — Dutch cut (shared gutters; fewer separating strokes)</option>
             <option value="bleed">Bleed layout (split bleed strips; more separating strokes)</option>
-          </select>
+              </select>
         </label>
 
         <label className="flex cursor-pointer items-start gap-2 sm:col-span-2 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-800 ring-1 ring-zinc-100">
@@ -2648,8 +2648,8 @@ export function NewEstimateForm({
                 : isPressReady
                   ? " (press-ready: full sheet)."
                   : " (Dutch / no bleed: full sheet)."}
-            </p>
-          )}
+                </p>
+              )}
           <p className="mt-1 text-[11px] text-zinc-500">
             Exact integer fits use a tiny tolerance so 24÷12 does not drift to 1.9999→1. Cutter separating strokes
             follow the style above: Dutch uses{" "}
@@ -2750,15 +2750,15 @@ export function NewEstimateForm({
                 {row.label.trim() ? row.label : "—"}
                 <span className="font-normal text-zinc-500"> · sheets ordered</span>
               </p>
-              <label className="block">
-                <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+        <label className="block">
+          <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
                   # of sheets
-                </span>
-                <input
-                  required
-                  type="number"
-                  min={1}
-                  step={1}
+          </span>
+          <input
+            required
+            type="number"
+            min={1}
+            step={1}
                   value={row.quantity}
                   onChange={(e) =>
                     setOrderLines((prev) =>
@@ -2767,8 +2767,8 @@ export function NewEstimateForm({
                   }
                   className="mt-1 w-full max-w-xs rounded-lg border border-zinc-300 px-3 py-2 text-sm tabular-nums outline-none focus:ring-2 focus:ring-zinc-400"
                   placeholder="Sheets"
-                />
-              </label>
+          />
+        </label>
             </div>
           ))}
         </div>
@@ -3527,20 +3527,20 @@ export function NewEstimateForm({
                 )}
               </LiveEstimateSection>
               <LiveEstimateSection title="Press time (laminator)">
-                {machines.length === 0 ? (
+              {machines.length === 0 ? (
                   <LiveEstimateRow
                     item="Run time"
                     basis={
-                      <span className="text-amber-800">
-                        No active machines.{" "}
+                  <span className="text-amber-800">
+                    No active machines.{" "}
                         <Link href="/module-setup/estimating" className="font-medium underline hover:no-underline">
-                          Add a machine
+                      Add a machine
                         </Link>
-                      </span>
+                  </span>
                     }
                     value="—"
                   />
-                ) : !selectedMachine ? (
+              ) : !selectedMachine ? (
                   <LiveEstimateRow item="Run time" basis="Select a laminator above" value="—" />
                 ) : !viewRunBreakdown || !Number.isFinite(viewRunBreakdown.totalMinutes) ? (
                   <LiveEstimateRow
@@ -3562,8 +3562,8 @@ export function NewEstimateForm({
                             Base {fmtDurationMinutes(viewRunBreakdown.makeReadyBaseMinutes)} +{" "}
                             {fmtDurationMinutes(viewRunBreakdown.makeReadyExtraByPrintTypeMinutes)} for{" "}
                             {printProcess}
-                          </>
-                        ) : (
+                </>
+              ) : (
                           "Machine template (minutes)"
                         )
                       }
@@ -3611,7 +3611,7 @@ export function NewEstimateForm({
                               frac >= 1 - 1e-9
                                 ? "100%"
                                 : `${fmtNum(frac * 100, frac < 0.02 ? 3 : 2)}%`;
-                            return (
+                              return (
                               <LiveEstimateRow
                                 key={`${r.sortOrder}-${r.name}`}
                                 item={`Rule: ${r.name}`}
@@ -3668,9 +3668,9 @@ export function NewEstimateForm({
                         basis="Effective line speed &amp; sheet length"
                         value={formatSheetsPerHour(viewRunSheetsPerHour)}
                       />
-                    )}
-                  </>
-                )}
+                  )}
+                </>
+              )}
               </LiveEstimateSection>
               <LiveEstimateSection title="Costs (USD)">
                 <LiveEstimateRow
@@ -3742,8 +3742,8 @@ export function NewEstimateForm({
                         basis="Machine + labor"
                         value={fmtUsd(viewPreviewCutterLabor.totalUsd, 2)}
                       />
-                    </>
-                  )}
+                </>
+              )}
                 {skidPackEnabled && viewPreviewSkidPack.error === null && (
                   <>
                     <LiveEstimateRow
@@ -3808,7 +3808,7 @@ export function NewEstimateForm({
                   Set machine and/or labor $/hr on the cutter so cutter time contributes to the total.
                 </p>
               )}
-          </div>
+              </div>
         )}
         {!viewPreview && !dimensionError && (
           <p className="text-sm text-zinc-500">

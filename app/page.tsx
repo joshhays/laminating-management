@@ -67,6 +67,11 @@ export default async function Home() {
     dbError = message;
   }
 
+  const dbUrlLooksWrong =
+    typeof dbError === "string" &&
+    (dbError.includes("must start with the protocol") ||
+      dbError.includes("validating datasource"));
+
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       {dbError ? (
@@ -76,12 +81,43 @@ export default async function Home() {
         >
           <p className="font-semibold">Could not load dashboard metrics</p>
           <p className="mt-1 text-amber-900/90">{dbError}</p>
-          <p className="mt-2 text-xs text-amber-800/80">
-            On Railway, set <code className="rounded bg-amber-100/80 px-1">DATABASE_URL</code> to your
-            Postgres connection string and apply the schema (e.g.{" "}
-            <code className="rounded bg-amber-100/80 px-1">npx prisma db push</code> against that
-            database).
-          </p>
+          {dbUrlLooksWrong ? (
+            <div className="mt-3 space-y-2 text-xs text-amber-800/90">
+              <p className="font-medium text-amber-950">
+                Prisma expects Postgres here — your{" "}
+                <code className="rounded bg-amber-100/80 px-1">DATABASE_URL</code> is not a Postgres URL
+                (often it is still a SQLite value like{" "}
+                <code className="rounded bg-amber-100/80 px-1">file:./dev.db</code> copied from local{" "}
+                <code className="rounded bg-amber-100/80 px-1">.env</code>).
+              </p>
+              <ol className="list-decimal space-y-1 pl-4">
+                <li>
+                  In Railway, add a <strong>PostgreSQL</strong> plugin if you have not already.
+                </li>
+                <li>
+                  On your <strong>web</strong> service → Variables: set{" "}
+                  <code className="rounded bg-amber-100/80 px-1">DATABASE_URL</code> by referencing the
+                  variable from the Postgres service (same name), or paste the connection string that
+                  begins with <code className="rounded bg-amber-100/80 px-1">postgresql://</code>.
+                </li>
+                <li>
+                  Remove any manual <code className="rounded bg-amber-100/80 px-1">file:</code> URL from
+                  Railway variables.
+                </li>
+                <li>
+                  Run schema sync once (Railway release command or locally):{" "}
+                  <code className="rounded bg-amber-100/80 px-1">npx prisma db push</code>.
+                </li>
+              </ol>
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-amber-800/80">
+              On Railway, set <code className="rounded bg-amber-100/80 px-1">DATABASE_URL</code> to your
+              Postgres connection string and apply the schema (e.g.{" "}
+              <code className="rounded bg-amber-100/80 px-1">npx prisma db push</code> against that
+              database).
+            </p>
+          )}
         </div>
       ) : null}
       <section>
