@@ -42,6 +42,10 @@ export function usesLaminatorLineFieldsCreate(mt: MachineTypeBrief | null | unde
   return mt.kind === MachineTypeKind.LAMINATOR || mt.kind === MachineTypeKind.PRESS;
 }
 
+export function usesPressEquipmentFields(mt: MachineTypeBrief | null | undefined): boolean {
+  return mt?.kind === MachineTypeKind.PRESS;
+}
+
 /** Prisma `where` fragment: active cutters used for trim estimates (legacy CUTTER or FINISHING+CUTTER). */
 export function autoCutterWhereClause() {
   return {

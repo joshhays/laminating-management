@@ -200,6 +200,49 @@ export async function POST(request: Request) {
       );
     }
 
+    const sheetGapInches = optDim("sheetGapInches");
+    const machineWarmUpMinutes = optDim("machineWarmUpMinutes");
+    const minSubstrateGsm = optDim("minSubstrateGsm");
+    const maxSubstrateGsm = optDim("maxSubstrateGsm");
+
+    if (sheetGapInches != null && (!Number.isFinite(sheetGapInches) || sheetGapInches < 0)) {
+      return NextResponse.json(
+        { error: "Sheet gap must be a non-negative number or blank" },
+        { status: 400 },
+      );
+    }
+    if (
+      machineWarmUpMinutes != null &&
+      (!Number.isFinite(machineWarmUpMinutes) || machineWarmUpMinutes < 0)
+    ) {
+      return NextResponse.json(
+        { error: "Machine warm-up time must be a non-negative number or blank" },
+        { status: 400 },
+      );
+    }
+    if (minSubstrateGsm != null && (!Number.isFinite(minSubstrateGsm) || minSubstrateGsm < 0)) {
+      return NextResponse.json(
+        { error: "Minimum substrate GSM must be non-negative or blank" },
+        { status: 400 },
+      );
+    }
+    if (maxSubstrateGsm != null && (!Number.isFinite(maxSubstrateGsm) || maxSubstrateGsm < 0)) {
+      return NextResponse.json(
+        { error: "Maximum substrate GSM must be non-negative or blank" },
+        { status: 400 },
+      );
+    }
+    if (
+      minSubstrateGsm != null &&
+      maxSubstrateGsm != null &&
+      minSubstrateGsm > maxSubstrateGsm
+    ) {
+      return NextResponse.json(
+        { error: "Substrate GSM min cannot be greater than max" },
+        { status: 400 },
+      );
+    }
+
     const row = await prisma.machine.create({
       data: {
         name,
@@ -223,6 +266,10 @@ export async function POST(request: Request) {
         maxSheetWidthInches: optDim("maxSheetWidthInches"),
         minSheetLengthInches: optDim("minSheetLengthInches"),
         maxSheetLengthInches: optDim("maxSheetLengthInches"),
+        sheetGapInches,
+        machineWarmUpMinutes,
+        minSubstrateGsm,
+        maxSubstrateGsm,
         machineTypeId: machineTypeId ?? undefined,
         cutterMaxHeightInches: optDim("cutterMaxHeightInches"),
         cutterMaxWeight: optDim("cutterMaxWeight"),

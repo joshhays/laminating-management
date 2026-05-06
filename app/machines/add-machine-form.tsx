@@ -8,8 +8,13 @@ import { formatMachineTypeOptionLabel } from "@/lib/machine-type-labels";
 import {
   usesCutterEstimateFields,
   usesLaminatorLineFieldsCreate,
+  usesPressEquipmentFields,
   usesSimpleEquipmentProfile,
 } from "@/lib/machine-equipment-profile";
+import {
+  referenceSheetLengthInchesForSph,
+  sheetsPerHourFromPressLineSpeed,
+} from "@/lib/press-sheets-per-hour";
 
 export function AddMachineForm({
   machineTypes,
@@ -45,6 +50,12 @@ export function AddMachineForm({
   const [cutterPerCutHours, setCutterPerCutHours] = useState("0");
   const [cutterMakeReadySpoilagePercent, setCutterMakeReadySpoilagePercent] = useState("");
   const [cutterMinCutsEnabled, setCutterMinCutsEnabled] = useState(false);
+  const [minSheetLengthInches, setMinSheetLengthInches] = useState("");
+  const [maxSheetLengthInches, setMaxSheetLengthInches] = useState("");
+  const [sheetGapInches, setSheetGapInches] = useState("");
+  const [machineWarmUpMinutes, setMachineWarmUpMinutes] = useState("");
+  const [minSubstrateGsm, setMinSubstrateGsm] = useState("");
+  const [maxSubstrateGsm, setMaxSubstrateGsm] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +68,31 @@ export function AddMachineForm({
   const showLineFields =
     machineTypeId.trim() === "" ? allowUntyped : usesLaminatorLineFieldsCreate(selectedType);
   const showSimpleProfile = selectedType != null && usesSimpleEquipmentProfile(selectedType);
+  const pressProfile = selectedType != null ? usesPressEquipmentFields(selectedType) : false;
+
+  const pressSphPreview = useMemo(() => {
+    if (!pressProfile) return null;
+    const spd = Number(maxSpeedMetersMin);
+    const gap = Number(sheetGapInches || 0);
+    const refLen = referenceSheetLengthInchesForSph({
+      minSheetLengthInches:
+        minSheetLengthInches.trim() === "" ? null : Number(minSheetLengthInches),
+      maxSheetLengthInches:
+        maxSheetLengthInches.trim() === "" ? null : Number(maxSheetLengthInches),
+    });
+    if (refLen == null || !Number.isFinite(refLen) || refLen <= 0) return null;
+    return sheetsPerHourFromPressLineSpeed({
+      maxSpeedMetersMin: spd,
+      sheetLengthInches: refLen,
+      sheetGapInches: gap,
+    });
+  }, [
+    pressProfile,
+    maxSpeedMetersMin,
+    sheetGapInches,
+    minSheetLengthInches,
+    maxSheetLengthInches,
+  ]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -123,6 +159,19 @@ export function AddMachineForm({
         body.washUpMinutes = Number(washUpMinutes || 0);
         body.spoilagePercent = Number(spoilagePercent || 0);
         body.pricePerCut = Number(pricePerCut || 0);
+        if (pressProfile) {
+          body.minSheetLengthInches =
+            minSheetLengthInches.trim() === "" ? null : Number(minSheetLengthInches);
+          body.maxSheetLengthInches =
+            maxSheetLengthInches.trim() === "" ? null : Number(maxSheetLengthInches);
+          body.sheetGapInches = sheetGapInches.trim() === "" ? null : Number(sheetGapInches);
+          body.machineWarmUpMinutes =
+            machineWarmUpMinutes.trim() === "" ? null : Number(machineWarmUpMinutes);
+          body.minSubstrateGsm =
+            minSubstrateGsm.trim() === "" ? null : Number(minSubstrateGsm);
+          body.maxSubstrateGsm =
+            maxSubstrateGsm.trim() === "" ? null : Number(maxSubstrateGsm);
+        }
       }
 
       const res = await fetch("/api/machines", {
@@ -157,7 +206,9 @@ export function AddMachineForm({
           ? "Cutter profile: times in hours, run spoilage %, and per-cut price. Hourly rates apply if you cost labor separately."
           : showSimpleProfile
             ? "Finishing (non-cutter) or mailing: hourly rates and notes. Line fields use safe placeholders until you refine the record."
-            : "Line equipment: web width, speed, and make ready. Add reduction and spoilage rules after saving."}
+            : pressProfile
+              ? "Press: sheet length bounds, substrate GSM, gap, warm-up, and rated speed drive nominal sheets per hour (preview below)."
+              : "Line equipment: web width, speed, and make ready. Add reduction and spoilage rules after saving."}
       </p>
       <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <label className="block sm:col-span-2 lg:col-span-3">
@@ -484,6 +535,141 @@ export function AddMachineForm({
                 Quantity bands on the machine edit page after you create it.
               </p>
             </label>
+            {pressProfile ? (
+              <div className="sm:col-span-2 lg:col-span-3 space-y-4 rounded-xl border border-zinc-200/90 bg-zinc-50/50 p-4">
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-800">
+                    Sheet length constraints
+                  </h3>
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        Min sheet length (in)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={minSheetLengthInches}
+                        onChange={(e) => setMinSheetLengthInches(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums"
+                        placeholder="Optional"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        Max sheet length (in)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={maxSheetLengthInches}
+                        onChange={(e) => setMaxSheetLengthInches(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums"
+                        placeholder="Optional"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-800">
+                    Operational constants
+                  </h3>
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        Sheet gap (in)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={sheetGapInches}
+                        onChange={(e) => setSheetGapInches(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums"
+                        placeholder="0"
+                      />
+                      <p className="mt-1 text-[11px] text-zinc-500">
+                        Travel pitch per sheet uses length + gap (same units).
+                      </p>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        Machine warm-up time (min)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={machineWarmUpMinutes}
+                        onChange={(e) => setMachineWarmUpMinutes(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums"
+                        placeholder="Optional"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-800">
+                    Substrate limits
+                  </h3>
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        Min substrate GSM
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={minSubstrateGsm}
+                        onChange={(e) => setMinSubstrateGsm(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums"
+                        placeholder="Optional"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        Max substrate GSM
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={maxSubstrateGsm}
+                        onChange={(e) => setMaxSubstrateGsm(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums"
+                        placeholder="Optional"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-600">
+                    Speed logic — nominal SPH preview
+                  </p>
+                  <p className="mt-2 text-xs text-zinc-600 leading-relaxed">
+                    Sheets per hour = (max speed m/min × 60) ÷ sheet pitch (m), where pitch = sheet
+                    length + sheet gap (inches → metres).
+                  </p>
+                  {pressSphPreview != null && Number.isFinite(pressSphPreview) ? (
+                    <p className="mt-2 text-lg font-semibold tabular-nums text-zinc-900">
+                      ≈{" "}
+                      {pressSphPreview.toLocaleString(undefined, {
+                        maximumFractionDigits: 0,
+                      })}{" "}
+                      sheets/hr
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-xs text-zinc-500">
+                      Enter max speed, at least one sheet length bound, then gap (optional defaults to
+                      0).
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </>
         )}
 

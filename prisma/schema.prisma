@@ -443,6 +443,13 @@ model Machine {
   maxSheetWidthInches   Float?
   minSheetLengthInches  Float?
   maxSheetLengthInches  Float?
+  /// Press / line: nominal gap between sheets along the web (inches); used with sheet length for SPH.
+  sheetGapInches        Float?
+  /// Press: warm-up before running (minutes), stored separately from make ready when needed.
+  machineWarmUpMinutes  Float?
+  /// Press: allowable substrate GSM range (optional).
+  minSubstrateGsm       Float?
+  maxSubstrateGsm       Float?
   machineTypeId     String?
   machineType       MachineType? @relation(fields: [machineTypeId], references: [id], onDelete: SetNull)
   /// Model-specific settings (cutterType, heatingMethod, etc.). Stored as JSON text (SQLite).

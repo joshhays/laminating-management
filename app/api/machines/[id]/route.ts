@@ -215,6 +215,73 @@ export async function PATCH(request: Request, { params }: Params) {
       );
     }
 
+    if (body.sheetGapInches !== undefined) {
+      const v = optDim("sheetGapInches");
+      const n = v === undefined ? undefined : v;
+      if (n != null && (!Number.isFinite(n) || n < 0)) {
+        return NextResponse.json(
+          { error: "Sheet gap must be a non-negative number or blank" },
+          { status: 400 },
+        );
+      }
+    }
+    if (body.machineWarmUpMinutes !== undefined) {
+      const v = optDim("machineWarmUpMinutes");
+      const n = v === undefined ? undefined : v;
+      if (n != null && (!Number.isFinite(n) || n < 0)) {
+        return NextResponse.json(
+          { error: "Machine warm-up time must be a non-negative number or blank" },
+          { status: 400 },
+        );
+      }
+    }
+    if (body.minSubstrateGsm !== undefined) {
+      const v = optDim("minSubstrateGsm");
+      const n = v === undefined ? undefined : v;
+      if (n != null && (!Number.isFinite(n) || n < 0)) {
+        return NextResponse.json(
+          { error: "Minimum substrate GSM must be non-negative or blank" },
+          { status: 400 },
+        );
+      }
+    }
+    if (body.maxSubstrateGsm !== undefined) {
+      const v = optDim("maxSubstrateGsm");
+      const n = v === undefined ? undefined : v;
+      if (n != null && (!Number.isFinite(n) || n < 0)) {
+        return NextResponse.json(
+          { error: "Maximum substrate GSM must be non-negative or blank" },
+          { status: 400 },
+        );
+      }
+    }
+    if (
+      body.minSubstrateGsm !== undefined ||
+      body.maxSubstrateGsm !== undefined
+    ) {
+      const prev = await prisma.machine.findUnique({
+        where: { id },
+        select: { minSubstrateGsm: true, maxSubstrateGsm: true },
+      });
+      if (!prev) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
+      const nextMn =
+        body.minSubstrateGsm !== undefined
+          ? (optDim("minSubstrateGsm") ?? null)
+          : prev.minSubstrateGsm;
+      const nextMx =
+        body.maxSubstrateGsm !== undefined
+          ? (optDim("maxSubstrateGsm") ?? null)
+          : prev.maxSubstrateGsm;
+      if (nextMn != null && nextMx != null && nextMn > nextMx) {
+        return NextResponse.json(
+          { error: "Substrate GSM min cannot be greater than max" },
+          { status: 400 },
+        );
+      }
+    }
+
     const row = await prisma.machine.update({
       where: { id },
       data: {
@@ -282,6 +349,18 @@ export async function PATCH(request: Request, { params }: Params) {
           : {}),
         ...(body.maxSheetLengthInches !== undefined
           ? { maxSheetLengthInches: optDim("maxSheetLengthInches") ?? null }
+          : {}),
+        ...(body.sheetGapInches !== undefined
+          ? { sheetGapInches: optDim("sheetGapInches") ?? null }
+          : {}),
+        ...(body.machineWarmUpMinutes !== undefined
+          ? { machineWarmUpMinutes: optDim("machineWarmUpMinutes") ?? null }
+          : {}),
+        ...(body.minSubstrateGsm !== undefined
+          ? { minSubstrateGsm: optDim("minSubstrateGsm") ?? null }
+          : {}),
+        ...(body.maxSubstrateGsm !== undefined
+          ? { maxSubstrateGsm: optDim("maxSubstrateGsm") ?? null }
           : {}),
         ...(machineTypeId !== undefined ? { machineTypeId } : {}),
         ...(maxTotalSlowdownPercent !== undefined ? { maxTotalSlowdownPercent } : {}),

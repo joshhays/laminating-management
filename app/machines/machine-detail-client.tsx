@@ -6,15 +6,19 @@ import type {
   MachineSpoilageRule,
   MachineType,
 } from "@prisma/client";
-import { MachineTypeKind } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { formatMachineTypeOptionLabel } from "@/lib/machine-type-labels";
 import {
   usesCutterEstimateFields,
   usesLaminatorLineFieldsCreate,
+  usesPressEquipmentFields,
   usesSimpleEquipmentProfile,
 } from "@/lib/machine-equipment-profile";
+import {
+  referenceSheetLengthInchesForSph,
+  sheetsPerHourFromPressLineSpeed,
+} from "@/lib/press-sheets-per-hour";
 import { MachineSpeedReductionRulesClient } from "./machine-speed-reduction-rules-client";
 import { MachineSpoilageRulesClient } from "./machine-spoilage-rules-client";
 
@@ -98,6 +102,18 @@ export function MachineDetailClient({ initial }: { initial: MachineWithRules }) 
   const [maxSheetLengthInches, setMaxSheetLengthInches] = useState(
     initial.maxSheetLengthInches != null ? String(initial.maxSheetLengthInches) : "",
   );
+  const [sheetGapInches, setSheetGapInches] = useState(
+    initial.sheetGapInches != null ? String(initial.sheetGapInches) : "",
+  );
+  const [machineWarmUpMinutes, setMachineWarmUpMinutes] = useState(
+    initial.machineWarmUpMinutes != null ? String(initial.machineWarmUpMinutes) : "",
+  );
+  const [minSubstrateGsm, setMinSubstrateGsm] = useState(
+    initial.minSubstrateGsm != null ? String(initial.minSubstrateGsm) : "",
+  );
+  const [maxSubstrateGsm, setMaxSubstrateGsm] = useState(
+    initial.maxSubstrateGsm != null ? String(initial.maxSubstrateGsm) : "",
+  );
   const [machineTypeId, setMachineTypeId] = useState(initial.machineTypeId ?? "");
   const [machineTypes, setMachineTypes] = useState<MachineType[]>([]);
   const [notes, setNotes] = useState(initial.notes ?? "");
@@ -128,7 +144,32 @@ export function MachineDetailClient({ initial }: { initial: MachineWithRules }) 
   const isCutterProfile = usesCutterEstimateFields(resolvedType);
   const showLineMachineForm = usesLaminatorLineFieldsCreate(resolvedType);
   const showSimpleProfile = resolvedType != null && usesSimpleEquipmentProfile(resolvedType);
+  const pressProfile = usesPressEquipmentFields(resolvedType);
   const showScheduleRules = !isCutterProfile && !showSimpleProfile && showLineMachineForm;
+
+  const pressSphPreview = useMemo(() => {
+    if (!pressProfile) return null;
+    const spd = Number(maxSpeedMetersMin);
+    const gap = Number(sheetGapInches || 0);
+    const refLen = referenceSheetLengthInchesForSph({
+      minSheetLengthInches:
+        minSheetLengthInches.trim() === "" ? null : Number(minSheetLengthInches),
+      maxSheetLengthInches:
+        maxSheetLengthInches.trim() === "" ? null : Number(maxSheetLengthInches),
+    });
+    if (refLen == null || !Number.isFinite(refLen) || refLen <= 0) return null;
+    return sheetsPerHourFromPressLineSpeed({
+      maxSpeedMetersMin: spd,
+      sheetLengthInches: refLen,
+      sheetGapInches: gap,
+    });
+  }, [
+    pressProfile,
+    maxSpeedMetersMin,
+    sheetGapInches,
+    minSheetLengthInches,
+    maxSheetLengthInches,
+  ]);
 
   async function handleSaveMachine(e: React.FormEvent) {
     e.preventDefault();
@@ -217,6 +258,11 @@ export function MachineDetailClient({ initial }: { initial: MachineWithRules }) 
             minSheetLengthInches.trim() === "" ? null : Number(minSheetLengthInches),
           maxSheetLengthInches:
             maxSheetLengthInches.trim() === "" ? null : Number(maxSheetLengthInches),
+          sheetGapInches: sheetGapInches.trim() === "" ? null : Number(sheetGapInches),
+          machineWarmUpMinutes:
+            machineWarmUpMinutes.trim() === "" ? null : Number(machineWarmUpMinutes),
+          minSubstrateGsm: minSubstrateGsm.trim() === "" ? null : Number(minSubstrateGsm),
+          maxSubstrateGsm: maxSubstrateGsm.trim() === "" ? null : Number(maxSubstrateGsm),
         });
       }
 
@@ -258,16 +304,16 @@ export function MachineDetailClient({ initial }: { initial: MachineWithRules }) 
             ? "Cutter equipment"
             : showSimpleProfile
               ? "Finishing / mailing equipment"
-              : resolvedType?.kind === MachineTypeKind.PRESS
-                ? "Press equipment"
-                : "Laminating line equipment"}
+              : pressProfile ? "Press equipment" : "Laminating line equipment"}
         </h2>
         <p className="text-xs text-zinc-500">
           {isCutterProfile
             ? "Setup times are in hours (matching shop floor cutters). Line speed fields below are kept for database compatibility — laminating estimates still use laminator records."
             : showSimpleProfile
               ? "Hourly rates and technical specs (JSON). No laminator speed or spoilage rules on this profile."
-              : "Line speed, sheet bounds, spoilage bands, and reduction rules drive estimate run time."}
+              : pressProfile
+                ? "Press: sheet bounds, GSM limits, gap, warm-up, and rated speed. Nominal sheets/hr preview uses pitch = sheet length + gap."
+                : "Line speed, sheet bounds, spoilage bands, and reduction rules drive estimate run time."}
         </p>
 
         <label className="block">
@@ -892,6 +938,13 @@ export function MachineDetailClient({ initial }: { initial: MachineWithRules }) 
                 placeholder="Optional"
               />
             </label>
+            {pressProfile ? (
+              <div className="sm:col-span-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-800">
+                  Sheet length constraints
+                </h3>
+              </div>
+            ) : null}
             <label className="block">
               <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
                 Min sheet length (in)
@@ -920,6 +973,106 @@ export function MachineDetailClient({ initial }: { initial: MachineWithRules }) 
                 placeholder="Optional"
               />
             </label>
+            {pressProfile ? (
+              <div className="sm:col-span-2 space-y-4 rounded-xl border border-zinc-200/90 bg-zinc-50/50 p-4">
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-800">
+                    Operational constants
+                  </h3>
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        Sheet gap (in)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={sheetGapInches}
+                        onChange={(e) => setSheetGapInches(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums"
+                        placeholder="0"
+                      />
+                      <p className="mt-1 text-[11px] text-zinc-500">
+                        Pitch uses sheet length + gap (converted to metres for SPH).
+                      </p>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        Machine warm-up time (min)
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={machineWarmUpMinutes}
+                        onChange={(e) => setMachineWarmUpMinutes(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums"
+                        placeholder="Optional"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-800">
+                    Substrate limits
+                  </h3>
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        Min substrate GSM
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={minSubstrateGsm}
+                        onChange={(e) => setMinSubstrateGsm(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums"
+                        placeholder="Optional"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                        Max substrate GSM
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={maxSubstrateGsm}
+                        onChange={(e) => setMaxSubstrateGsm(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm tabular-nums"
+                        placeholder="Optional"
+                      />
+                    </label>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2.5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-600">
+                    Speed logic — nominal SPH
+                  </p>
+                  <p className="mt-2 text-xs text-zinc-600 leading-relaxed">
+                    SPH ≈ (max speed m/min × 60) ÷ pitch (m); pitch = reference sheet length + sheet
+                    gap (inches). Reference length is the midpoint of min/max sheet length when both are
+                    set; otherwise whichever bound you entered.
+                  </p>
+                  {pressSphPreview != null && Number.isFinite(pressSphPreview) ? (
+                    <p className="mt-2 text-lg font-semibold tabular-nums text-zinc-900">
+                      ≈{" "}
+                      {pressSphPreview.toLocaleString(undefined, {
+                        maximumFractionDigits: 0,
+                      })}{" "}
+                      sheets/hr
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-xs text-zinc-500">
+                      Set max speed and at least one sheet length bound for a preview value.
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : null}
           <label className="block">
             <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
               Machine $/hr
