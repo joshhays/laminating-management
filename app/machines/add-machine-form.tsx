@@ -2,7 +2,7 @@
 
 import type { MachineType } from "@prisma/client";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { EstimatingEquipmentSection } from "@/lib/estimating-equipment-filters";
 import { formatMachineTypeOptionLabel } from "@/lib/machine-type-labels";
 import {
@@ -69,6 +69,14 @@ export function AddMachineForm({
     machineTypeId.trim() === "" ? allowUntyped : usesLaminatorLineFieldsCreate(selectedType);
   const showSimpleProfile = selectedType != null && usesSimpleEquipmentProfile(selectedType);
   const pressProfile = selectedType != null ? usesPressEquipmentFields(selectedType) : false;
+
+  /** Without a value="" option entry, the first real option can look selected while React state stays "". */
+  useEffect(() => {
+    if (allowUntyped) return;
+    if (machineTypes.length !== 1) return;
+    const onlyId = machineTypes[0]?.id;
+    if (onlyId && machineTypeId === "") setMachineTypeId(onlyId);
+  }, [allowUntyped, machineTypes, machineTypeId]);
 
   const pressSphPreview = useMemo(() => {
     if (!pressProfile) return null;
@@ -233,6 +241,11 @@ export function AddMachineForm({
             onChange={(e) => setMachineTypeId(e.target.value)}
             className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
           >
+            {!allowUntyped ? (
+              <option value="" disabled>
+                Select machine type…
+              </option>
+            ) : null}
             {allowUntyped ? <option value="">— None (laminator line) —</option> : null}
             {machineTypes.map((t) => (
               <option key={t.id} value={t.id}>
@@ -240,6 +253,12 @@ export function AddMachineForm({
               </option>
             ))}
           </select>
+          {!allowUntyped && machineTypes.length === 0 ? (
+            <p className="mt-2 text-sm text-amber-800">
+              No machine types in this category yet. Add one under “Machine types” above, refresh, then choose
+              it here.
+            </p>
+          ) : null}
         </label>
 
         {isCutterProfile ? (
