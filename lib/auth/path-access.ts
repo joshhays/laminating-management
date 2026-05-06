@@ -50,7 +50,8 @@ export function requiredModuleForPath(pathname: string): AppModuleKey | AuthOnly
     return requiredModuleForApi(pathname);
   }
 
-  if (pathname === "/" || pathname === "") return "OVERVIEW";
+  // Dashboard home: no site session gate (middleware stays Edge-safe without touching JWT/jose).
+  if (pathname === "/" || pathname === "") return null;
   if (pathname.startsWith("/admin")) return "ADMIN";
   if (pathname.startsWith("/estimates") || pathname.startsWith("/estimate")) return "ESTIMATES";
   if (pathname.startsWith("/jobs")) return "JOBS";
